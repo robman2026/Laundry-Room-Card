@@ -36,14 +36,14 @@ A polished, animated Lovelace card for your **Samsung SmartThings Washer & Dryer
 ### Option 1 — HACS (recommended)
 
 1. Open **HACS → Frontend → ⋮ → Custom repositories**
-2. Add URL: `https://github.com/YOUR_USERNAME/samsung-laundry-card`
+2. Add URL: `https://github.com/robman2026/Laundry-Room-Card`
 3. Category: **Dashboard**
 4. Click **Add**, then search for **Samsung Laundry Card** and install it
 5. Hard-reload your browser (`Ctrl+Shift+R`)
 
 ### Option 2 — Manual
 
-1. Download [`samsung-laundry-card.js`](https://github.com/YOUR_USERNAME/samsung-laundry-card/releases/latest)
+1. Download [`samsung-laundry-card.js`](https://github.com/robman2026/Laundry-Room-Card/releases/latest)
 2. Copy to `/config/www/samsung-laundry-card.js`
 3. Go to **Settings → Dashboards → Resources → Add resource**:
    ```
