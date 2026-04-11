@@ -6,7 +6,7 @@
  * License: MIT
  */
 
-const CARD_VERSION = "1.0.0";
+const CARD_VERSION = "1.1.0";
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 const STYLES = `
@@ -41,12 +41,6 @@ const STYLES = `
     position: relative;
     overflow: hidden;
     cursor: default;
-    transition: transform .25s ease, box-shadow .25s ease;
-  }
-  .slc-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 10px 50px rgba(0,0,0,0.6),
-                inset 0 1px 0 rgba(255,255,255,0.08);
   }
 
   /* Glow blob */
@@ -217,6 +211,15 @@ const STYLES = `
     border-radius: 12px;
     padding: 10px 6px;
     text-align: center;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .slc-stat:hover {
+    background: rgba(255,255,255,.09);
+    border-color: rgba(255,255,255,.12);
+  }
+  .slc-stat:active {
+    background: rgba(255,255,255,.13);
   }
   .slc-stat-val {
     font-family: 'DM Mono', monospace;
@@ -390,6 +393,23 @@ function stateLabel(state) {
   return state;
 }
 
+// ── Time formatter ─────────────────────────────────────────────────────────
+function friendlyTime(isoOrStr) {
+  if (!isoOrStr || isoOrStr === '—') return '—';
+  try {
+    const d = new Date(isoOrStr);
+    if (isNaN(d.getTime())) return isoOrStr; // not a date, return as-is
+    const now = new Date();
+    const diffMs = d - now;
+    const diffMin = Math.round(diffMs / 60000);
+    if (diffMin > 0 && diffMin < 120) return `in ${diffMin} min`;
+    if (diffMin <= 0 && diffMin > -120) return `${Math.abs(diffMin)} min ago`;
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return isoOrStr;
+  }
+}
+
 // ── Main Card Element ──────────────────────────────────────────────────────
 class SamsungLaundryCard extends HTMLElement {
 
@@ -482,7 +502,7 @@ class SamsungLaundryCard extends HTMLElement {
     const pill        = pillClass(state, true);
     const icon        = ended ? '✅' : '🫧';
     const offset      = running ? ringOffset(0.35) : CIRCUMFERENCE;
-    const timeLabel   = completion !== '—' ? `Done ${completion}` : (running ? 'Running…' : '—');
+    const timeLabel   = completion !== '—' ? `Done ${friendlyTime(completion)}` : (running ? 'Running…' : '—');
 
     return `
       <div class="slc-card slc-washer" data-device="washer">
@@ -512,27 +532,27 @@ class SamsungLaundryCard extends HTMLElement {
         <div class="slc-time">${timeLabel}</div>
 
         <div class="slc-stats slc-stats-3">
-          <div class="slc-stat">
+          <div class="slc-stat" data-action="more-info" data-entity="${cfg.washer_water_temperature}">
             <span class="slc-stat-val">${temp}</span>
             <span class="slc-stat-lbl">Temp</span>
           </div>
-          <div class="slc-stat">
+          <div class="slc-stat" data-action="more-info" data-entity="${cfg.washer_spin_level}">
             <span class="slc-stat-val">${spin}</span>
             <span class="slc-stat-lbl">Spin</span>
           </div>
-          <div class="slc-stat">
+          <div class="slc-stat" data-action="more-info" data-entity="${cfg.washer_power}">
             <span class="slc-stat-val">${power}</span>
             <span class="slc-stat-lbl">Power</span>
           </div>
-          <div class="slc-stat">
+          <div class="slc-stat" data-action="more-info" data-entity="${cfg.washer_energy}">
             <span class="slc-stat-val">${energy}</span>
             <span class="slc-stat-lbl">Energy</span>
           </div>
-          <div class="slc-stat">
+          <div class="slc-stat" data-action="more-info" data-entity="${cfg.washer_water_consumption}">
             <span class="slc-stat-val">${water}</span>
             <span class="slc-stat-lbl">Water</span>
           </div>
-          <div class="slc-stat">
+          <div class="slc-stat" data-action="more-info" data-entity="${cfg.washer_job_state}">
             <span class="slc-stat-val">${jobState}</span>
             <span class="slc-stat-lbl">Job</span>
           </div>
@@ -565,7 +585,7 @@ class SamsungLaundryCard extends HTMLElement {
     const pillLabel   = running ? 'Drying' : state;
     const icon        = ended ? '✅' : '🔥';
     const offset      = running ? ringOffset(0.6) : CIRCUMFERENCE;
-    const timeLabel   = completion !== '—' ? `Done ${completion}` : (running ? 'Running…' : '—');
+    const timeLabel   = completion !== '—' ? `Done ${friendlyTime(completion)}` : (running ? 'Running…' : '—');
     const wrinkleOn   = wrinkle === 'on';
 
     return `
@@ -596,15 +616,15 @@ class SamsungLaundryCard extends HTMLElement {
         <div class="slc-time">${timeLabel}</div>
 
         <div class="slc-stats slc-stats-3">
-          <div class="slc-stat">
+          <div class="slc-stat" data-action="more-info" data-entity="${cfg.dryer_energy}">
             <span class="slc-stat-val">${energy}</span>
             <span class="slc-stat-lbl">Energy</span>
           </div>
-          <div class="slc-stat">
+          <div class="slc-stat" data-action="more-info" data-entity="${cfg.dryer_power}">
             <span class="slc-stat-val">${power}</span>
             <span class="slc-stat-lbl">Power</span>
           </div>
-          <div class="slc-stat">
+          <div class="slc-stat" data-action="more-info" data-entity="${cfg.dryer_job_state}">
             <span class="slc-stat-val">${jobState}</span>
             <span class="slc-stat-lbl">Job</span>
           </div>
@@ -655,7 +675,9 @@ class SamsungLaundryCard extends HTMLElement {
         const entity = el.dataset.entity;
 
         if (action === 'more-info') {
-          this._moreInfo(entity);
+          if (entity && entity !== 'undefined' && entity !== '') {
+            this._moreInfo(entity);
+          }
         } else if (action === 'toggle-wrinkle') {
           const current = this._state(entity);
           this._callService('switch', current === 'on' ? 'turn_off' : 'turn_on', {
