@@ -7,13 +7,12 @@ class SamsungLaundryCard extends HTMLElement {
     }
 
     const config = this.config;
-    const appliance = config.appliance || 'washer'; // 'washer' or 'dryer'
+    const appliance = config.appliance || 'washer';
     
-    // Fetch entities from Home Assistant state
+    // Core Entities
     const machineStateEntity = hass.states[config.entities.machine_state];
     const completionTimeEntity = hass.states[config.entities.completion_time];
-    const energyEntity = hass.states[config.entities.energy];
-    const tempEntity = config.entities.temperature ? hass.states[config.entities.temperature] : null;
+    const jobStateEntity = config.entities.job_state ? hass.states[config.entities.job_state] : null;
 
     if (!machineStateEntity) return;
 
@@ -35,13 +34,34 @@ class SamsungLaundryCard extends HTMLElement {
     this.updateStatus(appliance, isRunning, isDone, isStopped);
     this.updateTimeAndRing(appliance, minsRemaining, isRunning, isDone);
     
-    // Update Stats
-    if (energyEntity) {
-      this.shadowRoot.getElementById('energyVal').textContent = `${parseFloat(energyEntity.state).toFixed(2)} kWh`;
+    // Update Cycle Name (Job State)
+    const cycleText = this.shadowRoot.getElementById('cycleName');
+    if (jobStateEntity && jobStateEntity.state && jobStateEntity.state.toLowerCase() !== 'none' && jobStateEntity.state !== 'unknown') {
+      cycleText.textContent = jobStateEntity.state;
+    } else {
+      cycleText.textContent = isRunning ? 'Running' : 'Smart Control';
     }
-    if (tempEntity) {
-      this.shadowRoot.getElementById('tempVal').textContent = `${tempEntity.state}${tempEntity.attributes.unit_of_measurement || '°C'}`;
-    }
+
+    // Update Custom Stats
+    [1, 2, 3].forEach(num => {
+      const statConfig = config.entities[`stat_${num}`];
+      const valElement = this.shadowRoot.getElementById(`statVal${num}`);
+      const labelElement = this.shadowRoot.getElementById(`statLabel${num}`);
+      
+      if (statConfig && statConfig.entity && hass.states[statConfig.entity]) {
+        const stateObj = hass.states[statConfig.entity];
+        // Format numbers to 1 decimal place if they are long floats (like Energy/Power)
+        let val = stateObj.state;
+        if (!isNaN(val) && val.includes('.')) val = parseFloat(val).toFixed(1);
+        
+        const unit = statConfig.unit || stateObj.attributes.unit_of_measurement || '';
+        valElement.textContent = `${val}${unit}`;
+        labelElement.textContent = statConfig.label || 'Stat';
+      } else {
+        valElement.textContent = '--';
+        labelElement.textContent = statConfig ? (statConfig.label || 'Stat') : '';
+      }
+    });
   }
 
   updateStatus(appliance, isRunning, isDone, isStopped) {
@@ -49,7 +69,6 @@ class SamsungLaundryCard extends HTMLElement {
     const statusPill = this.shadowRoot.getElementById('statusPill');
     const drumIcon = this.shadowRoot.getElementById('drumIcon');
 
-    // Reset classes
     card.className = `laundry-card ${appliance}-card`;
     
     if (isRunning) {
@@ -74,8 +93,7 @@ class SamsungLaundryCard extends HTMLElement {
     const timeText = this.shadowRoot.getElementById('timeRemaining');
     const ring = this.shadowRoot.getElementById('progressRing');
     
-    // Default total times for ring percentage (can be configured via YAML later)
-    const totalMins = appliance === 'washer' ? 55 : 50; 
+    const totalMins = this.config.total_cycle_mins || (appliance === 'washer' ? 55 : 50); 
     
     if (isRunning && minsRemaining > 0) {
       timeText.textContent = `${minsRemaining} min remaining`;
@@ -86,7 +104,7 @@ class SamsungLaundryCard extends HTMLElement {
       ring.style.strokeDashoffset = 0;
     } else {
       timeText.textContent = 'Ready';
-      ring.style.strokeDashoffset = 339.3; // Empty ring
+      ring.style.strokeDashoffset = 339.3;
     }
   }
 
@@ -112,27 +130,18 @@ class SamsungLaundryCard extends HTMLElement {
         
         *, *::before, *::after { box-sizing: border-box; }
         
-        :host {
-          display: block;
-          font-family: 'DM Sans', sans-serif;
-        }
+        :host { display: block; font-family: 'DM Sans', sans-serif; }
 
         .laundry-card {
-          width: 100%;
-          background: #181c27;
-          border-radius: 24px;
-          padding: 24px;
+          width: 100%; background: #181c27; border-radius: 24px; padding: 24px;
           border: 1px solid rgba(255,255,255,0.07);
           box-shadow: 0 4px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
-          position: relative;
-          overflow: hidden;
+          position: relative; overflow: hidden;
         }
 
         .laundry-card::before {
-          content: ''; position: absolute;
-          width: 180px; height: 180px; border-radius: 50%;
-          top: -60px; right: -50px; filter: blur(60px);
-          opacity: 0.18; pointer-events: none;
+          content: ''; position: absolute; width: 180px; height: 180px; border-radius: 50%;
+          top: -60px; right: -50px; filter: blur(60px); opacity: 0.18; pointer-events: none;
         }
         .washer-card::before { background: #4fa3e0; }
         .dryer-card::before  { background: #e07c4f; }
@@ -169,7 +178,7 @@ class SamsungLaundryCard extends HTMLElement {
         .cycle-label { text-align: center; font-size: 16px; font-weight: 600; color: rgba(255,255,255,0.88); margin-bottom: 4px; }
         .cycle-sub { text-align: center; font-size: 12px; color: rgba(255,255,255,0.32); margin-bottom: 20px; font-family: 'DM Mono', monospace; }
 
-        .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+        .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 20px; }
         .stat { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 10px 8px; text-align: center; border: 1px solid rgba(255,255,255,0.05); }
         .stat-value { font-family: 'DM Mono', monospace; font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.85); display: block; margin-bottom: 2px; }
         .stat-label { font-size: 9.5px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; color: rgba(255,255,255,0.28); }
@@ -208,12 +217,16 @@ class SamsungLaundryCard extends HTMLElement {
 
         <div class="stats">
           <div class="stat">
-            <span class="stat-value" id="energyVal">-- kWh</span>
-            <span class="stat-label">Energy</span>
+            <span class="stat-value" id="statVal1">--</span>
+            <span class="stat-label" id="statLabel1">Stat 1</span>
           </div>
           <div class="stat">
-            <span class="stat-value" id="tempVal">--</span>
-            <span class="stat-label">Temp / Status</span>
+            <span class="stat-value" id="statVal2">--</span>
+            <span class="stat-label" id="statLabel2">Stat 2</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value" id="statVal3">--</span>
+            <span class="stat-label" id="statLabel3">Stat 3</span>
           </div>
         </div>
       </div>
@@ -222,9 +235,3 @@ class SamsungLaundryCard extends HTMLElement {
 }
 
 customElements.define('samsung-laundry-card', SamsungLaundryCard);
-window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "samsung-laundry-card",
-  name: "Samsung Laundry Card",
-  description: "A custom animated card for Samsung Washers and Dryers"
-});
