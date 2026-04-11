@@ -1,2 +1,2 @@
 # Laundry-Room-Card
-This is a custom card for the Laundry Room where you can see your Washer and Dryer status.
+A beautiful Home Assistant Lovelace card for Samsung SmartThings Washer & Dryer with animated drum, progress ring, cycle info, and real-time sensor stats.
