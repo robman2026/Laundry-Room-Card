@@ -6,7 +6,7 @@
  * License: MIT
  */
 
-const CARD_VERSION = "1.1.0";
+const CARD_VERSION = "1.2.0";
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 const STYLES = `
@@ -449,24 +449,23 @@ class SamsungLaundryCard extends HTMLElement {
 
   setConfig(config) {
     this._config = { ...SamsungLaundryCard.getStubConfig(), ...config };
+    this._built = false; // force full rebuild when config changes
     this._render();
   }
 
   set hass(hass) {
     this._hass = hass;
-    this._render();
+    if (!this._built) {
+      this._render();       // first time: build full DOM
+    } else {
+      this._update();       // subsequent: patch only changed text/classes
+    }
   }
 
   _state(entityId) {
     if (!entityId || !this._hass) return null;
     const e = this._hass.states[entityId];
     return e ? e.state : null;
-  }
-
-  _attr(entityId, attr) {
-    if (!entityId || !this._hass) return null;
-    const e = this._hass.states[entityId];
-    return e && e.attributes ? e.attributes[attr] : null;
   }
 
   _callService(domain, service, data) {
@@ -483,188 +482,289 @@ class SamsungLaundryCard extends HTMLElement {
     this.dispatchEvent(ev);
   }
 
-  _buildWasherHTML() {
+  // ── Compute ring progress from last_changed + completion timestamp ──────
+  // SmartThings gives us the expected completion timestamp.
+  // We also know when the cycle started (last_changed on machine_state entity).
+  // progress = elapsed / total_duration, clamped 0..1
+  _ringProgress(machineStateEntityId, completionEntityId) {
+    if (!this._hass) return 0;
+
+    const compRaw = this._state(completionEntityId);
+    if (!compRaw || compRaw === 'unknown' || compRaw === 'unavailable') return 0;
+
+    const compTime = new Date(compRaw);
+    if (isNaN(compTime.getTime())) return 0;
+
+    // Get cycle start time from last_changed of machine_state entity
+    const msEntity = machineStateEntityId && this._hass.states[machineStateEntityId];
+    const startTime = msEntity && msEntity.last_changed
+      ? new Date(msEntity.last_changed)
+      : null;
+
+    const now = new Date();
+    const totalMs = startTime ? (compTime - startTime) : null;
+    const elapsedMs = startTime ? (now - startTime) : null;
+
+    if (!totalMs || totalMs <= 0) return 0;
+
+    return Math.max(0, Math.min(1, elapsedMs / totalMs));
+  }
+
+  // ── Build full static HTML skeleton (called once) ───────────────────────
+  _buildSkeleton() {
     const cfg = this._config;
-    const state       = this._state(cfg.washer_machine_state) || 'Stopped';
-    const course      = stateLabel(this._state(cfg.washer_current_course));
-    const completion  = stateLabel(this._state(cfg.washer_completion_time));
-    const temp        = stateLabel(this._state(cfg.washer_water_temperature));
-    const spin        = stateLabel(this._state(cfg.washer_spin_level));
-    const power       = stateLabel(this._state(cfg.washer_power));
-    const energy      = stateLabel(this._state(cfg.washer_energy));
-    const water       = stateLabel(this._state(cfg.washer_water_consumption));
-    const jobState    = stateLabel(this._state(cfg.washer_job_state));
+    const showWasher = cfg.show_washer !== false;
+    const showDryer  = cfg.show_dryer  !== false;
 
-    const running     = isRunning(state);
-    const ended       = isEnded(state);
-    const spinClass   = running ? 'spinning' : '';
-    const dotClass    = running ? 'active-w' : '';
-    const pill        = pillClass(state, true);
-    const icon        = ended ? '✅' : '🫧';
-    const offset      = running ? ringOffset(0.35) : CIRCUMFERENCE;
-    const timeLabel   = completion !== '—' ? `Done ${friendlyTime(completion)}` : (running ? 'Running…' : '—');
-
-    return `
+    const washerHTML = showWasher ? `
       <div class="slc-card slc-washer" data-device="washer">
-        <div class="slc-dot ${dotClass}"></div>
+        <div class="slc-dot" id="w-dot"></div>
         <div class="slc-brand">Samsung</div>
         <div class="slc-header">
           <div class="slc-device-name">Washer</div>
-          <div class="slc-pill ${pill}">${state}</div>
+          <div class="slc-pill pill-stopped" id="w-pill">—</div>
         </div>
-
-        <div class="slc-drum-wrap ${spinClass}">
+        <div class="slc-drum-wrap" id="w-drum-wrap">
           <svg class="slc-ring" viewBox="0 0 120 120">
             <circle class="ring-track" cx="60" cy="60" r="54"
               stroke-dasharray="${CIRCUMFERENCE}" stroke-dashoffset="0"/>
             <circle class="ring-washer" cx="60" cy="60" r="54"
+              id="w-ring"
               stroke-dasharray="${CIRCUMFERENCE}"
-              stroke-dashoffset="${offset}"/>
+              stroke-dashoffset="${CIRCUMFERENCE}"/>
           </svg>
           <div class="slc-drum">
             <div class="slc-drum-inner">
-              <span class="slc-drum-icon">${icon}</span>
+              <span class="slc-drum-icon" id="w-icon">🫧</span>
             </div>
           </div>
         </div>
-
-        <div class="slc-cycle">${course}</div>
-        <div class="slc-time">${timeLabel}</div>
-
+        <div class="slc-cycle" id="w-cycle">—</div>
+        <div class="slc-time" id="w-time">—</div>
         <div class="slc-stats slc-stats-3">
           <div class="slc-stat" data-action="more-info" data-entity="${cfg.washer_water_temperature}">
-            <span class="slc-stat-val">${temp}</span>
+            <span class="slc-stat-val" id="w-temp">—</span>
             <span class="slc-stat-lbl">Temp</span>
           </div>
           <div class="slc-stat" data-action="more-info" data-entity="${cfg.washer_spin_level}">
-            <span class="slc-stat-val">${spin}</span>
+            <span class="slc-stat-val" id="w-spin">—</span>
             <span class="slc-stat-lbl">Spin</span>
           </div>
           <div class="slc-stat" data-action="more-info" data-entity="${cfg.washer_power}">
-            <span class="slc-stat-val">${power}</span>
+            <span class="slc-stat-val" id="w-power">—</span>
             <span class="slc-stat-lbl">Power</span>
           </div>
           <div class="slc-stat" data-action="more-info" data-entity="${cfg.washer_energy}">
-            <span class="slc-stat-val">${energy}</span>
+            <span class="slc-stat-val" id="w-energy">—</span>
             <span class="slc-stat-lbl">Energy</span>
           </div>
           <div class="slc-stat" data-action="more-info" data-entity="${cfg.washer_water_consumption}">
-            <span class="slc-stat-val">${water}</span>
+            <span class="slc-stat-val" id="w-water">—</span>
             <span class="slc-stat-lbl">Water</span>
           </div>
           <div class="slc-stat" data-action="more-info" data-entity="${cfg.washer_job_state}">
-            <span class="slc-stat-val">${jobState}</span>
+            <span class="slc-stat-val" id="w-job">—</span>
             <span class="slc-stat-lbl">Job</span>
           </div>
         </div>
-
         <div class="slc-actions">
           <button class="slc-btn btn-neutral" data-action="more-info" data-entity="${cfg.washer_machine_state}">
             ℹ️ Details
           </button>
         </div>
       </div>
-    `;
-  }
+    ` : '';
 
-  _buildDryerHTML() {
-    const cfg = this._config;
-    const state       = this._state(cfg.dryer_machine_state) || 'Stopped';
-    const course      = stateLabel(this._state(cfg.dryer_current_course));
-    const completion  = stateLabel(this._state(cfg.dryer_completion_time));
-    const energy      = stateLabel(this._state(cfg.dryer_energy));
-    const power       = stateLabel(this._state(cfg.dryer_power));
-    const jobState    = stateLabel(this._state(cfg.dryer_job_state));
-    const wrinkle     = this._state(cfg.dryer_wrinkle_prevent);
-
-    const running     = isRunning(state);
-    const ended       = isEnded(state);
-    const spinClass   = running ? 'spinning-slow' : '';
-    const dotClass    = running ? 'active-d' : '';
-    const pill        = pillClass(state, false);
-    const pillLabel   = running ? 'Drying' : state;
-    const icon        = ended ? '✅' : '🔥';
-    const offset      = running ? ringOffset(0.6) : CIRCUMFERENCE;
-    const timeLabel   = completion !== '—' ? `Done ${friendlyTime(completion)}` : (running ? 'Running…' : '—');
-    const wrinkleOn   = wrinkle === 'on';
-
-    return `
+    const dryerHTML = showDryer ? `
       <div class="slc-card slc-dryer" data-device="dryer">
-        <div class="slc-dot ${dotClass}"></div>
+        <div class="slc-dot" id="d-dot"></div>
         <div class="slc-brand">Samsung</div>
         <div class="slc-header">
           <div class="slc-device-name">Dryer</div>
-          <div class="slc-pill ${pill}">${pillLabel}</div>
+          <div class="slc-pill pill-stopped" id="d-pill">—</div>
         </div>
-
-        <div class="slc-drum-wrap ${spinClass}">
+        <div class="slc-drum-wrap" id="d-drum-wrap">
           <svg class="slc-ring" viewBox="0 0 120 120">
             <circle class="ring-track" cx="60" cy="60" r="54"
               stroke-dasharray="${CIRCUMFERENCE}" stroke-dashoffset="0"/>
             <circle class="ring-dryer" cx="60" cy="60" r="54"
+              id="d-ring"
               stroke-dasharray="${CIRCUMFERENCE}"
-              stroke-dashoffset="${offset}"/>
+              stroke-dashoffset="${CIRCUMFERENCE}"/>
           </svg>
           <div class="slc-drum">
             <div class="slc-drum-inner">
-              <span class="slc-drum-icon">${icon}</span>
+              <span class="slc-drum-icon" id="d-icon">🔥</span>
             </div>
           </div>
         </div>
-
-        <div class="slc-cycle">${course}</div>
-        <div class="slc-time">${timeLabel}</div>
-
+        <div class="slc-cycle" id="d-cycle">—</div>
+        <div class="slc-time" id="d-time">—</div>
         <div class="slc-stats slc-stats-3">
           <div class="slc-stat" data-action="more-info" data-entity="${cfg.dryer_energy}">
-            <span class="slc-stat-val">${energy}</span>
+            <span class="slc-stat-val" id="d-energy">—</span>
             <span class="slc-stat-lbl">Energy</span>
           </div>
           <div class="slc-stat" data-action="more-info" data-entity="${cfg.dryer_power}">
-            <span class="slc-stat-val">${power}</span>
+            <span class="slc-stat-val" id="d-power">—</span>
             <span class="slc-stat-lbl">Power</span>
           </div>
           <div class="slc-stat" data-action="more-info" data-entity="${cfg.dryer_job_state}">
-            <span class="slc-stat-val">${jobState}</span>
+            <span class="slc-stat-val" id="d-job">—</span>
             <span class="slc-stat-lbl">Job</span>
           </div>
         </div>
-
         <div class="slc-actions">
           <button class="slc-btn btn-neutral" data-action="more-info" data-entity="${cfg.dryer_machine_state}">
             ℹ️ Details
           </button>
         </div>
-
         ${cfg.dryer_wrinkle_prevent ? `
-        <div class="slc-wrinkle ${wrinkleOn ? 'on' : ''}"
+        <div class="slc-wrinkle" id="d-wrinkle"
           data-action="toggle-wrinkle"
           data-entity="${cfg.dryer_wrinkle_prevent}">
-          <span class="slc-wrinkle-label">
-            <span>👕</span> Wrinkle Prevent
-          </span>
-          <div class="slc-toggle ${wrinkleOn ? 'on' : ''}"></div>
-        </div>
-        ` : ''}
+          <span class="slc-wrinkle-label"><span>👕</span> Wrinkle Prevent</span>
+          <div class="slc-toggle" id="d-toggle"></div>
+        </div>` : ''}
       </div>
-    `;
+    ` : '';
+
+    this.shadowRoot.innerHTML = `<style>${STYLES}</style><div class="slc-root">${washerHTML}${dryerHTML}</div>`;
+    this._attachListeners();
+    this._built = true;
+  }
+
+  // ── Helper: set text only when it actually changed ───────────────────────
+  _setText(id, val) {
+    const el = this.shadowRoot.getElementById(id);
+    if (el && el.textContent !== val) el.textContent = val;
+  }
+
+  _setAttr(id, attr, val) {
+    const el = this.shadowRoot.getElementById(id);
+    if (el) el.setAttribute(attr, val);
+  }
+
+  _setClass(id, cls, on) {
+    const el = this.shadowRoot.getElementById(id);
+    if (el) el.classList.toggle(cls, on);
+  }
+
+  _setPillClass(id, newClass) {
+    const el = this.shadowRoot.getElementById(id);
+    if (!el) return;
+    ['pill-stopped','pill-run','pill-drying','pill-pause','pill-end'].forEach(c => el.classList.remove(c));
+    el.classList.add(newClass);
+  }
+
+  // ── Patch DOM with fresh state — NO innerHTML reset, NO animation restart ─
+  _update() {
+    const cfg = this._config;
+
+    // ── Washer ──
+    if (cfg.show_washer !== false) {
+      const state      = this._state(cfg.washer_machine_state) || 'Stopped';
+      const completion = this._state(cfg.washer_completion_time);
+      const running    = isRunning(state);
+      const ended      = isEnded(state);
+
+      // Pill
+      this._setPillClass('w-pill', pillClass(state, true));
+      this._setText('w-pill', state);
+
+      // Dot
+      const wDot = this.shadowRoot.getElementById('w-dot');
+      if (wDot) { wDot.className = 'slc-dot' + (running ? ' active-w' : ''); }
+
+      // Drum spin — toggle class on wrapper, not on drum itself (avoids restart)
+      const wWrap = this.shadowRoot.getElementById('w-drum-wrap');
+      if (wWrap) {
+        const shouldSpin = running;
+        const isSpin = wWrap.classList.contains('spinning');
+        if (shouldSpin && !isSpin) wWrap.classList.add('spinning');
+        if (!shouldSpin && isSpin) wWrap.classList.remove('spinning');
+      }
+
+      // Icon
+      this._setText('w-icon', ended ? '✅' : '🫧');
+
+      // Ring — compute real progress
+      const progress = running ? this._ringProgress(cfg.washer_machine_state, cfg.washer_completion_time) : 0;
+      const wRing = this.shadowRoot.getElementById('w-ring');
+      if (wRing) wRing.setAttribute('stroke-dashoffset', ringOffset(progress));
+
+      // Time label
+      const timeLabel = completion && completion !== 'unknown' && completion !== 'unavailable'
+        ? `Done ${friendlyTime(completion)}`
+        : (running ? 'Running…' : '—');
+      this._setText('w-time', timeLabel);
+
+      // Stats
+      this._setText('w-cycle',  stateLabel(this._state(cfg.washer_current_course)));
+      this._setText('w-temp',   stateLabel(this._state(cfg.washer_water_temperature)));
+      this._setText('w-spin',   stateLabel(this._state(cfg.washer_spin_level)));
+      this._setText('w-power',  stateLabel(this._state(cfg.washer_power)));
+      this._setText('w-energy', stateLabel(this._state(cfg.washer_energy)));
+      this._setText('w-water',  stateLabel(this._state(cfg.washer_water_consumption)));
+      this._setText('w-job',    stateLabel(this._state(cfg.washer_job_state)));
+    }
+
+    // ── Dryer ──
+    if (cfg.show_dryer !== false) {
+      const state      = this._state(cfg.dryer_machine_state) || 'Stopped';
+      const completion = this._state(cfg.dryer_completion_time);
+      const running    = isRunning(state);
+      const ended      = isEnded(state);
+      const wrinkleOn  = this._state(cfg.dryer_wrinkle_prevent) === 'on';
+
+      // Pill
+      this._setPillClass('d-pill', pillClass(state, false));
+      this._setText('d-pill', running ? 'Drying' : state);
+
+      // Dot
+      const dDot = this.shadowRoot.getElementById('d-dot');
+      if (dDot) { dDot.className = 'slc-dot' + (running ? ' active-d' : ''); }
+
+      // Drum spin
+      const dWrap = this.shadowRoot.getElementById('d-drum-wrap');
+      if (dWrap) {
+        const shouldSpin = running;
+        const isSpin = dWrap.classList.contains('spinning-slow');
+        if (shouldSpin && !isSpin) dWrap.classList.add('spinning-slow');
+        if (!shouldSpin && isSpin) dWrap.classList.remove('spinning-slow');
+      }
+
+      // Icon
+      this._setText('d-icon', ended ? '✅' : '🔥');
+
+      // Ring
+      const progress = running ? this._ringProgress(cfg.dryer_machine_state, cfg.dryer_completion_time) : 0;
+      const dRing = this.shadowRoot.getElementById('d-ring');
+      if (dRing) dRing.setAttribute('stroke-dashoffset', ringOffset(progress));
+
+      // Time label
+      const timeLabel = completion && completion !== 'unknown' && completion !== 'unavailable'
+        ? `Done ${friendlyTime(completion)}`
+        : (running ? 'Running…' : '—');
+      this._setText('d-time', timeLabel);
+
+      // Stats
+      this._setText('d-cycle',  stateLabel(this._state(cfg.dryer_current_course)));
+      this._setText('d-energy', stateLabel(this._state(cfg.dryer_energy)));
+      this._setText('d-power',  stateLabel(this._state(cfg.dryer_power)));
+      this._setText('d-job',    stateLabel(this._state(cfg.dryer_job_state)));
+
+      // Wrinkle toggle
+      const wrinkleEl = this.shadowRoot.getElementById('d-wrinkle');
+      const toggleEl  = this.shadowRoot.getElementById('d-toggle');
+      if (wrinkleEl) wrinkleEl.classList.toggle('on', wrinkleOn);
+      if (toggleEl)  toggleEl.classList.toggle('on', wrinkleOn);
+    }
   }
 
   _render() {
-    const cfg = this._config;
-    const showWasher = cfg.show_washer !== false;
-    const showDryer  = cfg.show_dryer  !== false;
-
-    const html = `
-      <style>${STYLES}</style>
-      <div class="slc-root">
-        ${showWasher ? this._buildWasherHTML() : ''}
-        ${showDryer  ? this._buildDryerHTML()  : ''}
-      </div>
-    `;
-
-    this.shadowRoot.innerHTML = html;
-    this._attachListeners();
+    this._buildSkeleton();
+    if (this._hass) this._update();
   }
 
   _attachListeners() {
