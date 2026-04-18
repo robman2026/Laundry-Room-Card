@@ -6,7 +6,7 @@
  * License: MIT
  */
 
-const CARD_VERSION = "1.2.0";
+const CARD_VERSION = "1.3.0";
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 const STYLES = `
@@ -20,18 +20,20 @@ const STYLES = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   .slc-root {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
     padding: 4px 0;
+  }
+  @media (max-width: 540px) {
+    .slc-root { grid-template-columns: 1fr; }
+    .slc-dryer { order: -1; }
   }
 
   /* ── Card shell ── */
   .slc-card {
-    flex: 1;
-    min-width: 240px;
-    max-width: 300px;
+    width: 100%;
+    min-width: 0;
     background: #181c27;
     border-radius: 24px;
     padding: 22px 20px 20px;
@@ -110,6 +112,35 @@ const STYLES = `
   @keyframes slc-pulse {
     0%,100% { opacity: 1; transform: scale(1); }
     50%      { opacity: .4; transform: scale(.7); }
+  }
+
+  /* ── Pulsating glow ring ── */
+  .slc-glow {
+    position: absolute;
+    width: 100px; height: 100px;
+    border-radius: 50%;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .6s ease;
+    z-index: 0;
+  }
+  .slc-glow.active-w {
+    opacity: 1;
+    animation: glow-w 2.2s ease-in-out infinite;
+  }
+  .slc-glow.active-d {
+    opacity: 1;
+    animation: glow-d 2.4s ease-in-out infinite;
+  }
+  @keyframes glow-w {
+    0%,100% { box-shadow: 0 0 6px  4px  rgba(79,163,224,0.0);  }
+    45%      { box-shadow: 0 0 26px 14px rgba(79,163,224,0.38); }
+  }
+  @keyframes glow-d {
+    0%,100% { box-shadow: 0 0 6px  4px  rgba(224,124,79,0.0);  }
+    45%      { box-shadow: 0 0 26px 14px rgba(224,124,79,0.42); }
   }
 
   /* ── Drum ── */
@@ -367,25 +398,43 @@ function ringOffset(pct) {
 }
 
 // ── State helpers ──────────────────────────────────────────────────────────
+// ── State normaliser ──────────────────────────────────────────────────────
+function normaliseState(raw) {
+  if (!raw) return 'stopped';
+  const s = raw.toLowerCase();
+  if (s === 'run' || s === 'running')          return 'running';
+  if (s === 'pause' || s === 'paused')         return 'paused';
+  if (s === 'end' || s === 'finished' || s === 'done') return 'finished';
+  if (s === 'stop' || s === 'stopped')         return 'stopped';
+  return s;
+}
+
+const STATE_LABELS = {
+  running:  { washer: 'Running', dryer: 'Drying'   },
+  paused:   { washer: 'Paused',  dryer: 'Paused'   },
+  finished: { washer: 'Done',    dryer: 'Done'      },
+  stopped:  { washer: 'Stopped', dryer: 'Stopped'   },
+};
+
+function stateDisplayLabel(raw, isWasher) {
+  const n = normaliseState(raw);
+  return (STATE_LABELS[n] || STATE_LABELS.stopped)[isWasher ? 'washer' : 'dryer'];
+}
+
 function pillClass(state, isWasher) {
-  if (!state || state === 'stopped' || state === 'Stopped') return 'pill-stopped';
-  const s = state.toLowerCase();
-  if (s === 'run' || s === 'running') return isWasher ? 'pill-run' : 'pill-drying';
-  if (s === 'pause' || s === 'paused') return 'pill-pause';
-  if (s === 'end' || s === 'finished') return 'pill-end';
+  const n = normaliseState(state);
+  if (n === 'running') return isWasher ? 'pill-run' : 'pill-drying';
+  if (n === 'paused')  return 'pill-pause';
+  if (n === 'finished') return 'pill-end';
   return 'pill-stopped';
 }
 
 function isRunning(state) {
-  if (!state) return false;
-  const s = state.toLowerCase();
-  return s === 'run' || s === 'running';
+  return normaliseState(state) === 'running';
 }
 
 function isEnded(state) {
-  if (!state) return false;
-  const s = state.toLowerCase();
-  return s === 'end' || s === 'finished';
+  return normaliseState(state) === 'finished';
 }
 
 function stateLabel(state) {
@@ -393,18 +442,23 @@ function stateLabel(state) {
   return state;
 }
 
-// ── Time formatter ─────────────────────────────────────────────────────────
+// ── Time formatter (CET/CEST – Europe/Zurich) ─────────────────────────────
+const CET_TZ = 'Europe/Zurich';
+
 function friendlyTime(isoOrStr) {
   if (!isoOrStr || isoOrStr === '—') return '—';
   try {
     const d = new Date(isoOrStr);
-    if (isNaN(d.getTime())) return isoOrStr; // not a date, return as-is
+    if (isNaN(d.getTime())) return isoOrStr;
     const now = new Date();
     const diffMs = d - now;
     const diffMin = Math.round(diffMs / 60000);
-    if (diffMin > 0 && diffMin < 120) return `in ${diffMin} min`;
-    if (diffMin <= 0 && diffMin > -120) return `${Math.abs(diffMin)} min ago`;
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const clockTime = d.toLocaleTimeString('de-CH', {
+      hour: '2-digit', minute: '2-digit', timeZone: CET_TZ,
+    });
+    if (diffMin > 0 && diffMin < 180)  return `in ${diffMin} min (${clockTime})`;
+    if (diffMin <= 0 && diffMin > -180) return `${Math.abs(diffMin)} min ago (${clockTime})`;
+    return clockTime;
   } catch {
     return isoOrStr;
   }
@@ -525,6 +579,7 @@ class SamsungLaundryCard extends HTMLElement {
           <div class="slc-pill pill-stopped" id="w-pill">—</div>
         </div>
         <div class="slc-drum-wrap" id="w-drum-wrap">
+          <div class="slc-glow" id="w-glow"></div>
           <svg class="slc-ring" viewBox="0 0 120 120">
             <circle class="ring-track" cx="60" cy="60" r="54"
               stroke-dasharray="${CIRCUMFERENCE}" stroke-dashoffset="0"/>
@@ -584,6 +639,7 @@ class SamsungLaundryCard extends HTMLElement {
           <div class="slc-pill pill-stopped" id="d-pill">—</div>
         </div>
         <div class="slc-drum-wrap" id="d-drum-wrap">
+          <div class="slc-glow" id="d-glow"></div>
           <svg class="slc-ring" viewBox="0 0 120 120">
             <circle class="ring-track" cx="60" cy="60" r="54"
               stroke-dasharray="${CIRCUMFERENCE}" stroke-dashoffset="0"/>
@@ -670,11 +726,13 @@ class SamsungLaundryCard extends HTMLElement {
 
       // Pill
       this._setPillClass('w-pill', pillClass(state, true));
-      this._setText('w-pill', state);
+      this._setText('w-pill', stateDisplayLabel(state, true));
 
-      // Dot
+      // Dot + glow
       const wDot = this.shadowRoot.getElementById('w-dot');
       if (wDot) { wDot.className = 'slc-dot' + (running ? ' active-w' : ''); }
+      const wGlow = this.shadowRoot.getElementById('w-glow');
+      if (wGlow) { wGlow.className = 'slc-glow' + (running ? ' active-w' : ''); }
 
       // Drum spin — toggle class on wrapper, not on drum itself (avoids restart)
       const wWrap = this.shadowRoot.getElementById('w-drum-wrap');
@@ -719,11 +777,13 @@ class SamsungLaundryCard extends HTMLElement {
 
       // Pill
       this._setPillClass('d-pill', pillClass(state, false));
-      this._setText('d-pill', running ? 'Drying' : state);
+      this._setText('d-pill', stateDisplayLabel(state, false));
 
-      // Dot
+      // Dot + glow
       const dDot = this.shadowRoot.getElementById('d-dot');
       if (dDot) { dDot.className = 'slc-dot' + (running ? ' active-d' : ''); }
+      const dGlow = this.shadowRoot.getElementById('d-glow');
+      if (dGlow) { dGlow.className = 'slc-glow' + (running ? ' active-d' : ''); }
 
       // Drum spin
       const dWrap = this.shadowRoot.getElementById('d-drum-wrap');
