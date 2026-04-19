@@ -6,7 +6,7 @@
  * License: MIT
  */
 
-const CARD_VERSION = "1.3.0";
+const CARD_VERSION = "1.3.1";
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 const STYLES = `
@@ -448,15 +448,41 @@ const CET_TZ = 'Europe/Zurich';
 function friendlyTime(isoOrStr) {
   if (!isoOrStr || isoOrStr === '—') return '—';
   try {
-    const d = new Date(isoOrStr);
+    let d;
+
+    // SmartThings sends completion_time in two formats:
+    //   - While RUNNING : full ISO-8601 UTC  e.g. "2026-04-19T14:38:00+00:00"
+    //   - When STOPPED  : plain HH:MM UTC    e.g. "01:24"
+    // In both cases the value is UTC — we must convert to Europe/Zurich (CET/CEST).
+    // new Date("01:24") is treated as LOCAL time by the browser, not UTC → wrong!
+    const timeOnly = isoOrStr.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (timeOnly) {
+      // Attach today's UTC date so we parse as UTC, not local time
+      const nowUtc = new Date();
+      d = new Date(Date.UTC(
+        nowUtc.getUTCFullYear(),
+        nowUtc.getUTCMonth(),
+        nowUtc.getUTCDate(),
+        parseInt(timeOnly[1], 10),
+        parseInt(timeOnly[2], 10),
+        0
+      ));
+    } else {
+      d = new Date(isoOrStr); // handles ISO 8601 with Z or +00:00 correctly
+    }
+
     if (isNaN(d.getTime())) return isoOrStr;
+
     const now = new Date();
     const diffMs = d - now;
     const diffMin = Math.round(diffMs / 60000);
+
+    // Always display clock time in user's local timezone (Europe/Zurich)
     const clockTime = d.toLocaleTimeString('de-CH', {
       hour: '2-digit', minute: '2-digit', timeZone: CET_TZ,
     });
-    if (diffMin > 0 && diffMin < 180)  return `in ${diffMin} min (${clockTime})`;
+
+    if (diffMin > 0 && diffMin < 180)   return `in ${diffMin} min (${clockTime})`;
     if (diffMin <= 0 && diffMin > -180) return `${Math.abs(diffMin)} min ago (${clockTime})`;
     return clockTime;
   } catch {
@@ -952,7 +978,7 @@ window.customCards.push({
   name: 'Samsung Laundry Card',
   description: 'A beautiful card for Samsung SmartThings Washer & Dryer',
   preview: true,
-  documentationURL: 'https://github.com/YOUR_USERNAME/samsung-laundry-card',
+  documentationURL: 'https://github.com/robman2026/samsung-laundry-card',
 });
 
 console.info(
