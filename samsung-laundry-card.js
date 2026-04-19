@@ -448,41 +448,15 @@ const CET_TZ = 'Europe/Zurich';
 function friendlyTime(isoOrStr) {
   if (!isoOrStr || isoOrStr === '—') return '—';
   try {
-    let d;
-
-    // SmartThings sends completion_time in two formats:
-    //   - While RUNNING : full ISO-8601 UTC  e.g. "2026-04-19T14:38:00+00:00"
-    //   - When STOPPED  : plain HH:MM UTC    e.g. "01:24"
-    // In both cases the value is UTC — we must convert to Europe/Zurich (CET/CEST).
-    // new Date("01:24") is treated as LOCAL time by the browser, not UTC → wrong!
-    const timeOnly = isoOrStr.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
-    if (timeOnly) {
-      // Attach today's UTC date so we parse as UTC, not local time
-      const nowUtc = new Date();
-      d = new Date(Date.UTC(
-        nowUtc.getUTCFullYear(),
-        nowUtc.getUTCMonth(),
-        nowUtc.getUTCDate(),
-        parseInt(timeOnly[1], 10),
-        parseInt(timeOnly[2], 10),
-        0
-      ));
-    } else {
-      d = new Date(isoOrStr); // handles ISO 8601 with Z or +00:00 correctly
-    }
-
+    const d = new Date(isoOrStr);
     if (isNaN(d.getTime())) return isoOrStr;
-
     const now = new Date();
     const diffMs = d - now;
     const diffMin = Math.round(diffMs / 60000);
-
-    // Always display clock time in user's local timezone (Europe/Zurich)
     const clockTime = d.toLocaleTimeString('de-CH', {
       hour: '2-digit', minute: '2-digit', timeZone: CET_TZ,
     });
-
-    if (diffMin > 0 && diffMin < 180)   return `in ${diffMin} min (${clockTime})`;
+    if (diffMin > 0 && diffMin < 180)  return `in ${diffMin} min (${clockTime})`;
     if (diffMin <= 0 && diffMin > -180) return `${Math.abs(diffMin)} min ago (${clockTime})`;
     return clockTime;
   } catch {
@@ -778,9 +752,14 @@ class SamsungLaundryCard extends HTMLElement {
       if (wRing) wRing.setAttribute('stroke-dashoffset', ringOffset(progress));
 
       // Time label
-      const timeLabel = completion && completion !== 'unknown' && completion !== 'unavailable'
+      // Only show completion time when machine is actively running/paused.
+      // SmartThings updates completion_time to a new future value after the job ends,
+      // so we must NOT use it when stopped/finished — it would show a wrong future time.
+      const normState = normaliseState(state);
+      const isActive  = normState === 'running' || normState === 'paused';
+      const timeLabel = isActive && completion && completion !== 'unknown' && completion !== 'unavailable'
         ? `Done ${friendlyTime(completion)}`
-        : (running ? 'Running…' : '—');
+        : (isActive ? 'Running…' : '—');
       this._setText('w-time', timeLabel);
 
       // Stats
@@ -829,9 +808,14 @@ class SamsungLaundryCard extends HTMLElement {
       if (dRing) dRing.setAttribute('stroke-dashoffset', ringOffset(progress));
 
       // Time label
-      const timeLabel = completion && completion !== 'unknown' && completion !== 'unavailable'
+      // Only show completion time when machine is actively running/paused.
+      // SmartThings updates completion_time to a new future value after the job ends,
+      // so we must NOT use it when stopped/finished — it would show a wrong future time.
+      const dNormState = normaliseState(state);
+      const dIsActive  = dNormState === 'running' || dNormState === 'paused';
+      const timeLabel = dIsActive && completion && completion !== 'unknown' && completion !== 'unavailable'
         ? `Done ${friendlyTime(completion)}`
-        : (running ? 'Running…' : '—');
+        : (dIsActive ? 'Running…' : '—');
       this._setText('d-time', timeLabel);
 
       // Stats
