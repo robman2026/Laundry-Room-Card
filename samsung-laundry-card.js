@@ -607,7 +607,7 @@ class SamsungLaundryCard extends HTMLElement {
           </div>
           <div class="slc-stat" data-action="more-info" data-entity="${cfg.washer_power}">
             <span class="slc-stat-val" id="w-power">—</span>
-            <span class="slc-stat-lbl">Power</span>
+            <span class="slc-stat-lbl">Power (W)</span>
           </div>
           <div class="slc-stat" data-action="more-info" data-entity="${cfg.washer_energy}">
             <span class="slc-stat-val" id="w-energy">—</span>
@@ -663,7 +663,7 @@ class SamsungLaundryCard extends HTMLElement {
           </div>
           <div class="slc-stat" data-action="more-info" data-entity="${cfg.dryer_power}">
             <span class="slc-stat-val" id="d-power">—</span>
-            <span class="slc-stat-lbl">Power</span>
+            <span class="slc-stat-lbl">Power (W)</span>
           </div>
           <div class="slc-stat" data-action="more-info" data-entity="${cfg.dryer_job_state}">
             <span class="slc-stat-val" id="d-job">—</span>
@@ -752,14 +752,21 @@ class SamsungLaundryCard extends HTMLElement {
       if (wRing) wRing.setAttribute('stroke-dashoffset', ringOffset(progress));
 
       // Time label
-      // Only show completion time when machine is actively running/paused.
-      // SmartThings updates completion_time to a new future value after the job ends,
-      // so we must NOT use it when stopped/finished — it would show a wrong future time.
-      const normState = normaliseState(state);
-      const isActive  = normState === 'running' || normState === 'paused';
-      const timeLabel = isActive && completion && completion !== 'unknown' && completion !== 'unavailable'
-        ? `Done ${friendlyTime(completion)}`
-        : (isActive ? 'Running…' : '—');
+      // When RUNNING/PAUSED: completion_time entity = correct future finish time → show countdown.
+      // When STOPPED/FINISHED: SmartThings replaces completion_time with a NEW future value (garbage).
+      //   Instead, use last_changed of the machine_state entity = the actual moment it stopped.
+      let timeLabel;
+      if (running) {
+        timeLabel = completion && completion !== 'unknown' && completion !== 'unavailable'
+          ? `Done ${friendlyTime(completion)}`
+          : 'Running…';
+      } else if (ended || normaliseState(state) === 'stopped') {
+        const msEntity = cfg.washer_machine_state && this._hass && this._hass.states[cfg.washer_machine_state];
+        const finishedAt = msEntity && msEntity.last_changed ? msEntity.last_changed : null;
+        timeLabel = finishedAt ? `Done ${friendlyTime(finishedAt)}` : '—';
+      } else {
+        timeLabel = '—';
+      }
       this._setText('w-time', timeLabel);
 
       // Stats
@@ -808,15 +815,22 @@ class SamsungLaundryCard extends HTMLElement {
       if (dRing) dRing.setAttribute('stroke-dashoffset', ringOffset(progress));
 
       // Time label
-      // Only show completion time when machine is actively running/paused.
-      // SmartThings updates completion_time to a new future value after the job ends,
-      // so we must NOT use it when stopped/finished — it would show a wrong future time.
-      const dNormState = normaliseState(state);
-      const dIsActive  = dNormState === 'running' || dNormState === 'paused';
-      const timeLabel = dIsActive && completion && completion !== 'unknown' && completion !== 'unavailable'
-        ? `Done ${friendlyTime(completion)}`
-        : (dIsActive ? 'Running…' : '—');
-      this._setText('d-time', timeLabel);
+      // When RUNNING/PAUSED: completion_time entity = correct future finish time → show countdown.
+      // When STOPPED/FINISHED: SmartThings replaces completion_time with a NEW future value (garbage).
+      //   Instead, use last_changed of the machine_state entity = the actual moment it stopped.
+      let dTimeLabel;
+      if (running) {
+        dTimeLabel = completion && completion !== 'unknown' && completion !== 'unavailable'
+          ? `Done ${friendlyTime(completion)}`
+          : 'Running…';
+      } else if (ended || normaliseState(state) === 'stopped') {
+        const dMsEntity = cfg.dryer_machine_state && this._hass && this._hass.states[cfg.dryer_machine_state];
+        const dFinishedAt = dMsEntity && dMsEntity.last_changed ? dMsEntity.last_changed : null;
+        dTimeLabel = dFinishedAt ? `Done ${friendlyTime(dFinishedAt)}` : '—';
+      } else {
+        dTimeLabel = '—';
+      }
+      this._setText('d-time', dTimeLabel);
 
       // Stats
       this._setText('d-cycle',  stateLabel(this._state(cfg.dryer_current_course)));
@@ -962,7 +976,7 @@ window.customCards.push({
   name: 'Samsung Laundry Card',
   description: 'A beautiful card for Samsung SmartThings Washer & Dryer',
   preview: true,
-  documentationURL: 'https://github.com/robman2026/samsung-laundry-card',
+  documentationURL: 'https://github.com/robman2026/Laundry-Room-Card',
 });
 
 console.info(
