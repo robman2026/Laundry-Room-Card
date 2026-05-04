@@ -6,7 +6,7 @@
  * License: MIT
  */
 
-const CARD_VERSION = "1.3.1";
+const CARD_VERSION = "1.4.0";
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 const STYLES = `
@@ -388,6 +388,62 @@ const STYLES = `
     width: 100%;
     display: block;
   }
+
+  /* ── Frosted Glass (activated by .slc-frosted on each .slc-card) ── */
+  :host {
+    --slc-fg-bg: rgba(8,14,30,0.52);
+    --slc-fg-blur: 22px;
+  }
+  .slc-card.slc-frosted {
+    background: var(--slc-fg-bg) !important;
+    backdrop-filter: blur(var(--slc-fg-blur)) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(var(--slc-fg-blur)) saturate(180%) !important;
+    border-color: rgba(255,255,255,0.09) !important;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.07) !important;
+  }
+  .slc-card.slc-frosted::before { display: none !important; }
+  /* Stat tiles */
+  .slc-frosted .slc-stat {
+    background: rgba(255,255,255,0.05) !important;
+    border-color: rgba(255,255,255,0.09) !important;
+    backdrop-filter: blur(var(--slc-fg-blur)) !important;
+    -webkit-backdrop-filter: blur(var(--slc-fg-blur)) !important;
+  }
+  .slc-frosted .slc-stat:hover { background: rgba(255,255,255,0.09) !important; }
+  /* Details button */
+  .slc-frosted .btn-neutral {
+    background: rgba(255,255,255,0.07) !important;
+    border-color: rgba(255,255,255,0.1) !important;
+  }
+  .slc-frosted .btn-neutral:hover { background: rgba(255,255,255,0.12) !important; }
+  /* Wrinkle prevent tile */
+  .slc-frosted .slc-wrinkle {
+    background: rgba(255,255,255,0.04) !important;
+    border-color: rgba(255,255,255,0.08) !important;
+  }
+  .slc-frosted .slc-wrinkle:hover { background: rgba(255,255,255,0.08) !important; }
+  .slc-frosted .slc-wrinkle.on { background: rgba(224,124,79,0.1) !important; border-color: rgba(224,124,79,0.25) !important; }
+
+  /* ── Editor appearance controls ── */
+  .slc-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; margin-bottom: 10px; }
+  .slc-toggle-label { font-size: 13px; color: var(--primary-text-color, rgba(255,255,255,.85)); }
+  .slc-toggle-wrap { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+  .slc-toggle-wrap input { display: none; }
+  .slc-toggle-slider { position: absolute; inset: 0; background: rgba(255,255,255,.15); border-radius: 11px; cursor: pointer; transition: background .2s; }
+  .slc-toggle-slider::before { content: ''; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  .slc-toggle-wrap input:checked + .slc-toggle-slider { background: #4fa3e0; }
+  .slc-toggle-wrap input:checked + .slc-toggle-slider::before { transform: translateX(18px); }
+  .slc-range-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .slc-range-val { font-size: 12px; font-weight: 600; color: #4fa3e0; font-family: 'DM Mono', monospace; min-width: 38px; text-align: right; flex-shrink: 0; }
+  .slc-range-input {
+    -webkit-appearance: none; flex: 1; height: 4px; border-radius: 2px; outline: none; cursor: pointer;
+    background: linear-gradient(to right, #4fa3e0 0%, #4fa3e0 var(--rp, 50%), rgba(255,255,255,.12) var(--rp, 50%), rgba(255,255,255,.12) 100%);
+    border: none;
+  }
+  .slc-range-input::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px rgba(79,163,224,.4); cursor: pointer; }
+  .slc-range-input::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; border: none; background: #fff; box-shadow: 0 0 0 3px rgba(79,163,224,.4); cursor: pointer; }
+  .slc-frosted-fields { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+  .slc-hint { font-size: 11px; color: var(--secondary-text-color, rgba(255,255,255,.5)); line-height: 1.5; margin: 0 0 8px; }
 `;
 
 // ── Ring math ──────────────────────────────────────────────────────────────
@@ -498,12 +554,21 @@ class SamsungLaundryCard extends HTMLElement {
       dryer_wrinkle_prevent: '',
       show_washer: true,
       show_dryer: true,
+      frosted_glass: false,
+      frosted_opacity: 0.52,
+      frosted_blur: 22,
     };
   }
 
   setConfig(config) {
-    this._config = { ...SamsungLaundryCard.getStubConfig(), ...config };
-    this._built = false; // force full rebuild when config changes
+    this._config = {
+      ...SamsungLaundryCard.getStubConfig(),
+      frosted_glass: false,
+      frosted_opacity: 0.52,
+      frosted_blur: 22,
+      ...config,
+    };
+    this._built = false;
     this._render();
   }
 
@@ -570,8 +635,10 @@ class SamsungLaundryCard extends HTMLElement {
     const showWasher = cfg.show_washer !== false;
     const showDryer  = cfg.show_dryer  !== false;
 
+    const frostedCls = this._config.frosted_glass ? ' slc-frosted' : '';
+
     const washerHTML = showWasher ? `
-      <div class="slc-card slc-washer" data-device="washer">
+      <div class="slc-card slc-washer${frostedCls}" data-device="washer">
         <div class="slc-dot" id="w-dot"></div>
         <div class="slc-brand">Samsung</div>
         <div class="slc-header">
@@ -631,7 +698,7 @@ class SamsungLaundryCard extends HTMLElement {
     ` : '';
 
     const dryerHTML = showDryer ? `
-      <div class="slc-card slc-dryer" data-device="dryer">
+      <div class="slc-card slc-dryer${frostedCls}" data-device="dryer">
         <div class="slc-dot" id="d-dot"></div>
         <div class="slc-brand">Samsung</div>
         <div class="slc-header">
@@ -849,6 +916,20 @@ class SamsungLaundryCard extends HTMLElement {
   _render() {
     this._buildSkeleton();
     if (this._hass) this._update();
+    this._applyFrostedVars();
+  }
+
+  _applyFrostedVars() {
+    const cfg = this._config;
+    if (cfg && cfg.frosted_glass) {
+      const opacity = Math.min(0.9, Math.max(0.1, parseFloat(cfg.frosted_opacity) || 0.52));
+      const blur    = Math.min(40,  Math.max(4,   parseFloat(cfg.frosted_blur)    || 22));
+      this.style.setProperty('--slc-fg-bg',  'rgba(8,14,30,' + opacity + ')');
+      this.style.setProperty('--slc-fg-blur', blur + 'px');
+    } else {
+      this.style.removeProperty('--slc-fg-bg');
+      this.style.removeProperty('--slc-fg-blur');
+    }
   }
 
   _attachListeners() {
@@ -912,10 +993,45 @@ class SamsungLaundryCardEditor extends HTMLElement {
   }
 
   _render() {
+    const cfg = this._config;
     this.shadowRoot.innerHTML = `
       <style>${STYLES}</style>
       <div class="slc-editor">
         <h3>🧺 Samsung Laundry Card</h3>
+
+        <div class="slc-editor-section">
+          <h4>🎨 Appearance</h4>
+          <div class="slc-toggle-row">
+            <span class="slc-toggle-label">Frosted Glass Mode</span>
+            <label class="slc-toggle-wrap">
+              <input type="checkbox" id="fg-toggle" ${cfg.frosted_glass ? 'checked' : ''} />
+              <span class="slc-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="slc-frosted-fields" id="frosted-fields" style="display:${cfg.frosted_glass ? 'flex' : 'none'}">
+            <p class="slc-hint">Translucent blur effect on both cards. Works best with a dynamic wallpaper behind Home Assistant.</p>
+            <div class="slc-field">
+              <label>Glass Opacity</label>
+              <div class="slc-range-row">
+                <input type="range" class="slc-range-input" id="opacity-range"
+                  min="0.1" max="0.9" step="0.01"
+                  value="${cfg.frosted_opacity || 0.52}"
+                  style="--rp:${Math.round(((cfg.frosted_opacity || 0.52) - 0.1) / 0.8 * 100)}%" />
+                <span class="slc-range-val" id="opacity-val">${(cfg.frosted_opacity || 0.52).toFixed(2)}</span>
+              </div>
+            </div>
+            <div class="slc-field">
+              <label>Blur Strength</label>
+              <div class="slc-range-row">
+                <input type="range" class="slc-range-input" id="blur-range"
+                  min="4" max="40" step="1"
+                  value="${cfg.frosted_blur || 22}"
+                  style="--rp:${Math.round(((cfg.frosted_blur || 22) - 4) / 36 * 100)}%" />
+                <span class="slc-range-val" id="blur-val">${cfg.frosted_blur || 22}px</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div class="slc-editor-section">
           <h4>🫧 Washer Entities</h4>
@@ -950,19 +1066,57 @@ class SamsungLaundryCardEditor extends HTMLElement {
       });
     }
 
-    // Listen for changes
+    // Frosted glass toggle
+    const fgToggle = this.shadowRoot.getElementById('fg-toggle');
+    const fgFields = this.shadowRoot.getElementById('frosted-fields');
+    if (fgToggle) {
+      fgToggle.addEventListener('change', e => {
+        this._changed('frosted_glass', e.target.checked);
+        if (fgFields) fgFields.style.display = e.target.checked ? 'flex' : 'none';
+      });
+    }
+
+    // Opacity range
+    const opRange = this.shadowRoot.getElementById('opacity-range');
+    const opVal   = this.shadowRoot.getElementById('opacity-val');
+    if (opRange) {
+      opRange.addEventListener('input', e => {
+        const v = parseFloat(e.target.value);
+        e.target.style.setProperty('--rp', Math.round((v - 0.1) / 0.8 * 100) + '%');
+        if (opVal) opVal.textContent = v.toFixed(2);
+        this._changed('frosted_opacity', v);
+      });
+    }
+
+    // Blur range
+    const blRange = this.shadowRoot.getElementById('blur-range');
+    const blVal   = this.shadowRoot.getElementById('blur-val');
+    if (blRange) {
+      blRange.addEventListener('input', e => {
+        const v = parseInt(e.target.value);
+        e.target.style.setProperty('--rp', Math.round((v - 4) / 36 * 100) + '%');
+        if (blVal) blVal.textContent = v + 'px';
+        this._changed('frosted_blur', v);
+      });
+    }
+
+    // Listen for entity picker changes
     this.shadowRoot.querySelectorAll('ha-entity-picker').forEach(picker => {
       picker.addEventListener('value-changed', (e) => {
         const key = picker.dataset.key;
         const val = e.detail.value;
-        this._config = { ...this._config, [key]: val };
-        this.dispatchEvent(new CustomEvent('config-changed', {
-          detail: { config: this._config },
-          bubbles: true,
-          composed: true,
-        }));
+        this._changed(key, val);
       });
     });
+  }
+
+  _changed(key, val) {
+    this._config = { ...this._config, [key]: val };
+    this.dispatchEvent(new CustomEvent('config-changed', {
+      detail: { config: this._config },
+      bubbles: true,
+      composed: true,
+    }));
   }
 }
 
