@@ -185,6 +185,14 @@ class SamsungLaundryCard extends LitElement {
     this._config = config;
   }
 
+  updated() {
+    // .innerHTML doesn't work in LitElement html`` templates — inject foot SVGs here
+    this.shadowRoot.querySelectorAll('.mc-foot[data-foot]').forEach(el => {
+      const [brand, side] = el.dataset.foot.split('-');
+      el.innerHTML = footSVG(brand, side);
+    });
+  }
+
   getCardSize() { return 6; }
 
   _fireMoreInfo(entityId) {
@@ -265,7 +273,7 @@ class SamsungLaundryCard extends LitElement {
 
     // Frosted glass
     const fg = cfg.frosted_glass;
-    const fgBg   = fg ? `rgba(8,14,30,${Math.min(.9,Math.max(.1,parseFloat(cfg.frosted_opacity)||.52)})` : '';
+    const fgBg   = fg ? `rgba(8,14,30,${Math.min(.9, Math.max(.1, parseFloat(cfg.frosted_opacity) || .52))})` : '';
     const fgBlur = fg ? `${Math.min(40,Math.max(4,parseFloat(cfg.frosted_blur)||22))}px` : '';
     const panelStyle = fg ? `background:${fgBg};backdrop-filter:blur(${fgBlur});-webkit-backdrop-filter:blur(${fgBlur});` : '';
 
@@ -413,7 +421,7 @@ class SamsungLaundryCard extends LitElement {
         </div>
 
         <!-- FOOT -->
-        <div class="mc-foot" .innerHTML="${footSVG(brand, side)}"></div>
+        <div class="mc-foot" data-foot="${brand}-${side}"></div>
       </div>`;
   }
 
