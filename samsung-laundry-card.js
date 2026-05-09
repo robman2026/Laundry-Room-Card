@@ -3,7 +3,7 @@
  * Appliance-style front panel for washer + dryer — multi-brand
  * Author: robman2026
  * GitHub: https://github.com/robman2026/laundry-card
- * Version: 2.0.0
+ * Version: 2.0.1
  * License: MIT
  *
  * Backward-compatible with v1.x flat config keys:
@@ -20,7 +20,7 @@
  *   washer_label, dryer_label
  */
 
-const LC_VERSION = '2.0.0';
+const LC_VERSION = '2.0.1';
 
 const LitElement = Object.getPrototypeOf(customElements.get('ha-panel-lovelace'));
 const { html, css } = LitElement.prototype;
