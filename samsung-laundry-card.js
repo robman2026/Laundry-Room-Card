@@ -6,7 +6,7 @@
  * Version: 2.1.0
  *
  * Fully backward-compatible with v1.x flat config keys.
- * Wrinkle prevent = switch (toggleable).
+
  * Program name = washer_current_course / dryer_current_course (optional sensor).
  * 6 fully configurable stat tiles per machine.
  */
@@ -142,7 +142,7 @@ class SamsungLaundryCard extends LitElement {
       washer_water_temperature:'', washer_spin_level:'', washer_power:'',
       washer_energy:'', washer_water_consumption:'', washer_job_state:'',
       dryer_machine_state:'', dryer_completion_time:'', dryer_current_course:'',
-      dryer_energy:'', dryer_power:'', dryer_job_state:'', dryer_wrinkle_prevent:'',
+      dryer_energy:'', dryer_power:'', dryer_job_state:'',
     };
   }
 
@@ -253,10 +253,6 @@ class SamsungLaundryCard extends LitElement {
     ];
     const stats = isW ? wStats : dStats;
 
-    // Wrinkle prevent (switch — toggleable)
-    const wrinkleEid = cfg.dryer_wrinkle_prevent;
-    const wrinkleOn  = !isW && wrinkleEid && getState(this.hass, wrinkleEid)==='on';
-
     const themeCls = THEME_CLS[brand]||'t-sam';
 
     return html`
@@ -366,17 +362,6 @@ class SamsungLaundryCard extends LitElement {
                 <span class="mc-sl">${s.lbl}</span>
               </div>`)}
           </div>
-
-          <!-- Wrinkle prevent — dryer only, switch → tappable -->
-          ${!isW && wrinkleEid ? html`
-            <div class="mc-wrinkle ${wrinkleOn?'wk-on':''}"
-              @click=${()=>this._callService('switch', wrinkleOn?'turn_off':'turn_on', {entity_id:wrinkleEid})}>
-              <span class="mc-wk-lbl">🫙 Wrinkle prevent</span>
-              <div class="mc-wk-val">
-                <div class="mc-wk-dot ${wrinkleOn?'wk-dot-on':''}"></div>
-                <span>${wrinkleOn?'On':'Off'}</span>
-              </div>
-            </div>` : ''}
         </div>
 
         <!-- FOOT (injected via updated()) -->
@@ -455,14 +440,6 @@ class SamsungLaundryCard extends LitElement {
 .mc-sl{font-size:7px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;}
 .mc-foot{flex-shrink:0;line-height:0;}
 .mc-foot svg{display:block;width:100%;}
-/* Wrinkle switch */
-.mc-wrinkle{width:100%;margin-top:6px;border-radius:10px;padding:7px 11px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:background .2s;}
-.mc-wrinkle:hover{filter:brightness(.95);}
-.mc-wk-lbl{font-size:8px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;}
-.mc-wk-val{display:flex;align-items:center;gap:4px;font-size:9px;font-family:'DM Mono',monospace;font-weight:600;}
-.mc-wk-dot{width:7px;height:7px;border-radius:50%;}
-.wk-dot-on{background:#e07c4f;box-shadow:0 0 5px rgba(224,124,79,.5);}
-.wk-on .mc-wk-lbl{color:#c05a20;}
 /* Live dots */
 .lv-wr{background:#4fa3e0;box-shadow:0 0 6px #4fa3e0;animation:lp 2s ease infinite;}
 .lv-dr{background:#e07c4f;box-shadow:0 0 6px #e07c4f;animation:lp 2s ease infinite .4s;}
@@ -477,10 +454,6 @@ class SamsungLaundryCard extends LitElement {
 .t-sam .mc-prog-wrap{background:rgba(0,0,0,.08);}
 .t-sam .mc-st{background:rgba(0,0,0,.05);border:1px solid rgba(0,0,0,.07);}
 .t-sam .mc-sv{color:#111;}.t-sam .mc-sl{color:rgba(0,0,0,.28);}
-.t-sam .mc-wrinkle{background:rgba(0,0,0,.04);border:1px solid rgba(0,0,0,.07);}
-.t-sam .mc-wk-lbl{color:rgba(0,0,0,.3);}.t-sam .mc-wk-val{color:rgba(0,0,0,.3);}
-.t-sam .mc-wk-dot{background:rgba(0,0,0,.14);}
-.t-sam .wk-on{background:rgba(224,124,79,.09);border-color:rgba(224,124,79,.22);}
 /* ── LG ── */
 .t-lg .mc-panel{background:linear-gradient(180deg,#1a1a1a,#111);border-bottom:1px solid rgba(255,255,255,.06);}
 .t-lg .mc-knob{background:radial-gradient(circle at 50% 50%,#222,#0a0a0a);border:2px solid rgba(255,255,255,.15);box-shadow:0 0 0 4px rgba(255,255,255,.04),0 3px 8px rgba(0,0,0,.8);width:36px;height:36px;}
@@ -490,9 +463,6 @@ class SamsungLaundryCard extends LitElement {
 .t-lg .mc-prog-wrap{background:rgba(255,255,255,.08);}
 .t-lg .mc-st{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);}
 .t-lg .mc-sv{color:rgba(255,255,255,.88);}.t-lg .mc-sl{color:rgba(255,255,255,.3);}
-.t-lg .mc-wrinkle{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);}
-.t-lg .mc-wk-lbl{color:rgba(255,255,255,.3);}.t-lg .mc-wk-val{color:rgba(255,255,255,.3);}
-.t-lg .mc-wk-dot{background:rgba(255,255,255,.18);}
 .t-lg .ph-chrome{background:conic-gradient(from 0deg,#333,#666,#888,#555,#333,#666,#888,#555,#333);}
 .t-lg .ph{--ph-r-t:8px;--ph-w-t:20px;--ph-w-s:calc(var(--ph) - 40px);}
 .t-lg .ph-rubber{background:radial-gradient(circle at 30% 26%,#1a1a1a 0%,#050505 60%,#000 100%);box-shadow:inset 0 4px 16px rgba(0,0,0,.95);}
@@ -506,9 +476,6 @@ class SamsungLaundryCard extends LitElement {
 .t-bsh .mc-prog-wrap{background:rgba(0,0,0,.08);}
 .t-bsh .mc-st{background:rgba(0,0,0,.05);border:1px solid rgba(0,0,0,.07);}
 .t-bsh .mc-sv{color:#111;}.t-bsh .mc-sl{color:rgba(0,0,0,.28);}
-.t-bsh .mc-wrinkle{background:rgba(0,0,0,.04);border:1px solid rgba(0,0,0,.07);}
-.t-bsh .mc-wk-lbl{color:rgba(0,0,0,.3);}.t-bsh .mc-wk-val{color:rgba(0,0,0,.3);}
-.t-bsh .mc-wk-dot{background:rgba(0,0,0,.14);}
 .t-bsh .ph-chrome{background:conic-gradient(from 0deg,#888,#ddd,#eee,#bbb,#999,#ccc,#eee,#bbb,#888);box-shadow:0 3px 10px rgba(0,0,0,.25);}
 .t-bsh .ph{--ph-r-t:8px;--ph-w-t:20px;--ph-w-s:calc(var(--ph) - 40px);}
 .t-bsh .ph-rubber{background:radial-gradient(circle at 30% 26%,#1a1a1a 0%,#000 70%);box-shadow:inset 0 5px 18px rgba(0,0,0,.95);}
@@ -521,9 +488,6 @@ class SamsungLaundryCard extends LitElement {
 .t-miele .mc-prog-wrap{background:rgba(0,0,0,.07);}
 .t-miele .mc-st{background:rgba(0,0,0,.04);border:1px solid rgba(0,0,0,.06);}
 .t-miele .mc-sv{color:#111;}.t-miele .mc-sl{color:rgba(0,0,0,.27);}
-.t-miele .mc-wrinkle{background:rgba(0,0,0,.04);border:1px solid rgba(0,0,0,.06);}
-.t-miele .mc-wk-lbl{color:rgba(0,0,0,.28);}.t-miele .mc-wk-val{color:rgba(0,0,0,.28);}
-.t-miele .mc-wk-dot{background:rgba(0,0,0,.14);}
 .t-miele .ph-chrome{background:conic-gradient(from 0deg,#aaa,#eee,#fff,#ddd,#aaa,#eee,#fff,#ddd,#aaa);box-shadow:0 4px 16px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.5);}
 .t-miele .ph{--ph-r-t:12px;--ph-w-t:26px;--ph-w-s:calc(var(--ph) - 52px);}
 .t-miele .ph-rubber{background:radial-gradient(circle at 32% 28%,#222 0%,#060606 70%);}
@@ -696,7 +660,6 @@ class SamsungLaundryCardEditor extends LitElement {
       ${this._pick('Power W (Power tile)','dryer_power',['sensor'])}
       ${this._pick('Job state (Job tile)','dryer_job_state',['sensor'])}
       <p class="hg">⚙️ Controls</p>
-      ${this._pick('Wrinkle prevent (switch — tappable on/off)','dryer_wrinkle_prevent',['switch','binary_sensor'])}
     `;
   }
 
@@ -706,7 +669,7 @@ class SamsungLaundryCardEditor extends LitElement {
       'washer_water_temperature','washer_spin_level','washer_power',
       'washer_energy','washer_water_consumption','washer_job_state'].filter(k=>this._config[k]).length;
     const dCount = ['dryer_machine_state','dryer_completion_time','dryer_current_course',
-      'dryer_energy','dryer_power','dryer_job_state','dryer_wrinkle_prevent'].filter(k=>this._config[k]).length;
+      'dryer_energy','dryer_power','dryer_job_state',].filter(k=>this._config[k]).length;
     return html`
       <div class="root">
         ${this._sec('appearance','🎨 Appearance & Brand',undefined,this._appearance())}
