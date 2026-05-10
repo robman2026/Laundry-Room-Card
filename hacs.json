@@ -1,7 +1,8 @@
 {
   "name": "Laundry Card",
-  "description": "Appliance-style front-load washer & dryer card for Home Assistant. Supports Samsung, LG, Bosch, Siemens, Miele and any other brand.",
-  "documentation": "https://github.com/robman2026/Laundry-Room-Card",
+  "description": "Appliance-style front-load washer & dryer card. Supports Samsung, LG, Bosch, Siemens, Miele and more.",
+  "content_in_root": true,
+  "filename": "laundry-card.js",
   "homeassistant": "2023.4.0",
   "render_readme": true
 }
