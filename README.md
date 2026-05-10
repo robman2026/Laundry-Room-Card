@@ -15,7 +15,7 @@ A custom Home Assistant Lovelace card that displays your washer and dryer as a f
 
 ## Installation via HACS
 
-1. In HACS → Custom repositories → add `https://github.com/robman2026/laundry-card`
+1. In HACS → Custom repositories → add `https://github.com/robman2026/Laundry-Room-Card`
 2. Install **Laundry Card**
 3. Add resource: `/local/laundry-card.js` (type: JavaScript Module)
 
