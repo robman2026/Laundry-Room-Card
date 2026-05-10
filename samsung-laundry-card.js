@@ -1,5 +1,5 @@
 /**
- * Samsung Laundry Card
+ * Laundry Card
  * Appliance-style front panel for washer + dryer — multi-brand
  * Author: robman2026
  * GitHub: https://github.com/robman2026/laundry-card
@@ -724,13 +724,13 @@ customElements.define('samsung-laundry-card-editor', SamsungLaundryCardEditor);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type:'samsung-laundry-card', name:'Samsung Laundry Card',
-  description:'Appliance-style washer + dryer — Samsung, LG, Bosch, Siemens, Miele',
+  type:'samsung-laundry-card', name:'Laundry Card',
+  description:'Appliance-style front-load washer & dryer card. Works with any brand: Samsung, LG, Bosch, Siemens, Miele and more.',
   preview:true, documentationURL:'https://github.com/robman2026/laundry-card',
 });
 
 console.info(
-  '%c SAMSUNG-LAUNDRY-CARD %c v'+LC_VERSION+' ',
+  '%c LAUNDRY-CARD %c v'+LC_VERSION+' ',
   'background:#4fa3e0;color:#fff;font-weight:700;padding:2px 6px;border-radius:4px 0 0 4px;',
   'background:#0d1020;color:#6dbfff;font-weight:600;padding:2px 6px;border-radius:0 4px 4px 0;'
 );
