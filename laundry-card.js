@@ -726,7 +726,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type:'samsung-laundry-card', name:'Laundry Card',
   description:'Appliance-style front-load washer & dryer card. Works with any brand: Samsung, LG, Bosch, Siemens, Miele and more.',
-  preview:true, documentationURL:'https://github.com/robman2026/laundry-card',
+  preview:true, documentationURL:'https://github.com/robman2026/Laundry-Room-Card',
 });
 
 console.info(
