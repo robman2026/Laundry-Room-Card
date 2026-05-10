@@ -1,8 +1,7 @@
 {
-  "name": "Samsung Laundry Card",
-  "description": "A beautiful Home Assistant Lovelace card for Samsung SmartThings Washer & Dryer with animated drum, progress ring, cycle info, and real-time sensor stats.",
-  "render_readme": true,
-  "filename": "samsung-laundry-card.js",
-  "homeassistant": "2023.1.0",
-  "content_in_root": true
+  "name": "Laundry Card",
+  "description": "Appliance-style front-load washer & dryer card for Home Assistant. Supports Samsung, LG, Bosch, Siemens, Miele and any other brand.",
+  "documentation": "https://github.com/robman2026/Laundry-Room-Card",
+  "homeassistant": "2023.4.0",
+  "render_readme": true
 }
