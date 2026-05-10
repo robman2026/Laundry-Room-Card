@@ -22,7 +22,7 @@ A custom Home Assistant Lovelace card that displays your washer and dryer as a f
 ## Quick Start (YAML)
 
 ```yaml
-type: custom:samsung-laundry-card
+type: custom:laundry-card
 brand: samsung
 washer_machine_state: sensor.laundry_room_washer_machine_state
 washer_completion_time: sensor.laundry_room_washer_completion_time
