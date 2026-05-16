@@ -381,7 +381,7 @@ class SamsungLaundryCard extends LitElement {
   static get styles() {
     return css`
 :host{display:block;}
-.lc-root{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch;}
+.lc-root{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;align-items:stretch;width:100%;}
 @media(max-width:480px){.lc-root{grid-template-columns:1fr;}}
 .mc{display:flex;flex-direction:column;border-radius:18px;overflow:hidden;box-shadow:0 8px 36px rgba(0,0,0,.7);}
 /* Panel */
