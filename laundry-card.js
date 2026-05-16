@@ -11,7 +11,7 @@
  * 6 fully configurable stat tiles per machine.
  */
 
-const LC_VERSION = '2.3.0';
+const LC_VERSION = '2.4.0';
 
 const LitElement = Object.getPrototypeOf(customElements.get('ha-panel-lovelace'));
 const { html, css } = LitElement.prototype;
@@ -141,6 +141,8 @@ class SamsungLaundryCard extends LitElement {
       washer_machine_state:'', washer_completion_time:'', washer_current_course:'',
       washer_water_temperature:'', washer_spin_level:'', washer_power:'',
       washer_energy:'', washer_water_consumption:'', washer_job_state:'',
+      washer_control:'', washer_rinse_cycles:'', washer_bubble_soak:'',
+      washer_wrinkle_prevent:'', washer_remote_control:'',
       dryer_machine_state:'', dryer_completion_time:'', dryer_current_course:'',
       dryer_energy:'', dryer_power:'', dryer_job_state:'',
     };
@@ -194,6 +196,119 @@ class SamsungLaundryCard extends LitElement {
       timeText = lr ? `Last run · ${lr}` : '—';
     }
     return { normState, program, timeText };
+  }
+
+  // ── Washer controls ───────────────────────────────────────────────────────
+  _renderControls(cfg) {
+    const h = this.hass;
+
+    const controlEid = cfg.washer_control;
+    const spinEid    = cfg.washer_spin_level;
+    const tempEid    = cfg.washer_water_temperature;
+    const rinseEid   = cfg.washer_rinse_cycles;
+    const bubbleEid  = cfg.washer_bubble_soak;
+    const wrinkleEid = cfg.washer_wrinkle_prevent;
+    const remoteEid  = cfg.washer_remote_control;
+
+    if (!controlEid && !rinseEid && !bubbleEid && !wrinkleEid) return '';
+
+    const remoteOn = remoteEid ? getState(h, remoteEid) === 'on' : true;
+
+    const ctrlState   = controlEid ? getState(h, controlEid) : null;
+    const isRunning   = ctrlState === 'run';
+    const isPaused    = ctrlState === 'pause';
+    const isStopped   = !isRunning && !isPaused;
+
+    const spinState   = spinEid   ? getState(h, spinEid)   : null;
+    const tempState   = tempEid   ? getState(h, tempEid)   : null;
+    const rinseState  = rinseEid  ? parseInt(getState(h, rinseEid) || 0) : 0;
+    const bubbleState = bubbleEid ? getState(h, bubbleEid) === 'on' : false;
+    const wrinkState  = wrinkleEid ? getState(h, wrinkleEid) === 'on' : false;
+
+    const spinOpts = spinEid  ? (h.states[spinEid]?.attributes?.options  || []) : [];
+    const tempOpts = tempEid  ? (h.states[tempEid]?.attributes?.options  || []) : [];
+    const rinseMin = rinseEid ? (h.states[rinseEid]?.attributes?.min     ?? 0)  : 0;
+    const rinseMax = rinseEid ? (h.states[rinseEid]?.attributes?.max     ?? 5)  : 5;
+
+    return html`
+      <div class="mc-ctrl">
+        ${!remoteOn && remoteEid ? html`
+          <div class="mc-warn">⚠ Enable remote control on the machine</div>
+        ` : ''}
+
+        ${controlEid ? html`
+          <div class="mc-ctrl-btns">
+            <button class="mc-btn mc-btn-run ${isRunning?'active':''}"
+              @click=${()=>this._callService('select','select_option',{entity_id:controlEid,option:'run'})}>
+              ▶ Run
+            </button>
+            <button class="mc-btn mc-btn-pause ${isPaused?'active':''}"
+              @click=${()=>this._callService('select','select_option',{entity_id:controlEid,option:'pause'})}>
+              ⏸ Pause
+            </button>
+            <button class="mc-btn mc-btn-stop ${isStopped?'active':''}"
+              @click=${()=>this._callService('select','select_option',{entity_id:controlEid,option:'stop'})}>
+              ⏹ Stop
+            </button>
+          </div>
+        ` : ''}
+
+        ${(spinEid || tempEid) ? html`
+          <div class="mc-ctrl-row">
+            ${spinEid ? html`
+              <div class="mc-ctrl-field">
+                <span class="mc-ctrl-lbl">Spin</span>
+                <select class="mc-ctrl-sel" .value=${spinState||''}
+                  @change=${(e)=>this._callService('select','select_option',{entity_id:spinEid,option:e.target.value})}>
+                  ${spinOpts.map(o=>html`<option value="${o}" ?selected=${o===spinState}>${o}</option>`)}
+                </select>
+              </div>
+            ` : ''}
+            ${tempEid ? html`
+              <div class="mc-ctrl-field">
+                <span class="mc-ctrl-lbl">Temp</span>
+                <select class="mc-ctrl-sel" .value=${tempState||''}
+                  @change=${(e)=>this._callService('select','select_option',{entity_id:tempEid,option:e.target.value})}>
+                  ${tempOpts.map(o=>html`<option value="${o}" ?selected=${o===tempState}>${o}</option>`)}
+                </select>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
+
+        ${rinseEid ? html`
+          <div class="mc-ctrl-row">
+            <div class="mc-ctrl-field mc-ctrl-field-full">
+              <span class="mc-ctrl-lbl">Rinse cycles</span>
+              <div class="mc-rinse">
+                <button class="mc-rinse-btn" ?disabled=${rinseState<=rinseMin}
+                  @click=${()=>this._callService('number','set_value',{entity_id:rinseEid,value:Math.max(rinseMin,rinseState-1)})}>−</button>
+                <span class="mc-rinse-val">${rinseState}</span>
+                <button class="mc-rinse-btn" ?disabled=${rinseState>=rinseMax}
+                  @click=${()=>this._callService('number','set_value',{entity_id:rinseEid,value:Math.min(rinseMax,rinseState+1)})}>+</button>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
+        ${(bubbleEid || wrinkleEid) ? html`
+          <div class="mc-ctrl-chips">
+            ${bubbleEid ? html`
+              <button class="mc-chip ${bubbleState?'active':''}"
+                @click=${()=>this._callService('switch',bubbleState?'turn_off':'turn_on',{entity_id:bubbleEid})}>
+                🫧 BubbleSoak
+              </button>
+            ` : ''}
+            ${wrinkleEid ? html`
+              <button class="mc-chip ${wrinkState?'active':''}"
+                @click=${()=>this._callService('switch',wrinkState?'turn_off':'turn_on',{entity_id:wrinkleEid})}>
+                👕 Anti-Wrinkle
+              </button>
+            ` : ''}
+          </div>
+        ` : ''}
+      </div>
+    `;
   }
 
   // ── Render one machine ────────────────────────────────────────────────────
@@ -364,6 +479,9 @@ class SamsungLaundryCard extends LitElement {
           </div>
         </div>
 
+        <!-- CONTROLS (washer only, shown when control entities are configured) -->
+        ${isW ? this._renderControls(cfg) : ''}
+
         <!-- FOOT (injected via updated()) -->
         <div class="mc-foot" data-foot="${side}"></div>
       </div>`;
@@ -491,6 +609,42 @@ class SamsungLaundryCard extends LitElement {
 .t-miele .ph-chrome{background:conic-gradient(from 0deg,#aaa,#eee,#fff,#ddd,#aaa,#eee,#fff,#ddd,#aaa);box-shadow:0 4px 16px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.5);}
 .t-miele .ph{--ph-r-t:12px;--ph-w-t:26px;--ph-w-s:calc(var(--ph) - 52px);}
 .t-miele .ph-rubber{background:radial-gradient(circle at 32% 28%,#222 0%,#060606 70%);}
+/* ── Controls ── */
+.mc-ctrl{padding:10px 13px 14px;display:flex;flex-direction:column;gap:8px;}
+.mc-warn{font-size:10px;color:#e07c4f;background:rgba(224,124,79,.12);border:1px solid rgba(224,124,79,.25);border-radius:8px;padding:6px 10px;text-align:center;}
+.mc-ctrl-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;}
+.mc-btn{border:none;border-radius:10px;padding:8px 4px;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;letter-spacing:.03em;font-family:inherit;}
+.mc-btn-run{background:rgba(79,163,224,.12);color:#4fa3e0;border:1px solid rgba(79,163,224,.25);}
+.mc-btn-run.active,.mc-btn-run:hover{background:#4fa3e0;color:#fff;}
+.mc-btn-pause{background:rgba(240,200,74,.1);color:#c9921a;border:1px solid rgba(240,200,74,.25);}
+.mc-btn-pause.active,.mc-btn-pause:hover{background:#e0b44f;color:#fff;}
+.mc-btn-stop{background:rgba(200,200,200,.08);color:rgba(0,0,0,.45);border:1px solid rgba(0,0,0,.1);}
+.mc-btn-stop.active,.mc-btn-stop:hover{background:rgba(0,0,0,.15);color:rgba(0,0,0,.7);}
+.t-lg .mc-btn-stop{color:rgba(255,255,255,.5);border-color:rgba(255,255,255,.12);background:rgba(255,255,255,.06);}
+.t-lg .mc-btn-stop.active,.t-lg .mc-btn-stop:hover{background:rgba(255,255,255,.15);color:#fff;}
+.mc-ctrl-row{display:flex;gap:8px;align-items:flex-end;}
+.mc-ctrl-field{flex:1;display:flex;flex-direction:column;gap:4px;}
+.mc-ctrl-field-full{flex:1;}
+.mc-ctrl-lbl{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(0,0,0,.35);}
+.t-lg .mc-ctrl-lbl{color:rgba(255,255,255,.4);}
+.mc-ctrl-sel{width:100%;padding:7px 8px;font-size:11px;font-weight:500;font-family:inherit;border:1px solid rgba(0,0,0,.1);border-radius:8px;background:rgba(0,0,0,.05);color:rgba(0,0,0,.7);cursor:pointer;outline:none;}
+.mc-ctrl-sel:focus{border-color:rgba(79,163,224,.6);}
+.t-lg .mc-ctrl-sel{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.8);}
+.mc-rinse{display:flex;align-items:center;border:1px solid rgba(0,0,0,.1);border-radius:8px;overflow:hidden;background:rgba(0,0,0,.05);}
+.t-lg .mc-rinse{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.12);}
+.mc-rinse-btn{width:32px;height:32px;border:none;background:transparent;font-size:16px;font-weight:700;cursor:pointer;color:rgba(0,0,0,.55);transition:background .12s;flex-shrink:0;}
+.t-lg .mc-rinse-btn{color:rgba(255,255,255,.6);}
+.mc-rinse-btn:hover:not(:disabled){background:rgba(79,163,224,.15);}
+.mc-rinse-btn:disabled{opacity:.3;cursor:default;}
+.mc-rinse-val{flex:1;text-align:center;font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:rgba(0,0,0,.7);}
+.t-lg .mc-rinse-val{color:rgba(255,255,255,.85);}
+.mc-ctrl-chips{display:flex;gap:6px;flex-wrap:wrap;}
+.mc-chip{padding:6px 12px;font-size:11px;font-weight:500;font-family:inherit;border:1px solid rgba(0,0,0,.12);border-radius:20px;background:rgba(0,0,0,.05);color:rgba(0,0,0,.55);cursor:pointer;transition:all .15s;}
+.mc-chip:hover{background:rgba(79,163,224,.12);border-color:rgba(79,163,224,.3);}
+.mc-chip.active{background:#4fa3e0;border-color:#4fa3e0;color:#fff;}
+.t-lg .mc-chip{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.55);}
+.t-lg .mc-chip:hover{background:rgba(79,163,224,.2);}
+.t-lg .mc-chip.active{background:#4fa3e0;border-color:#4fa3e0;color:#fff;}
     `;
   }
 }
@@ -636,6 +790,15 @@ class SamsungLaundryCardEditor extends LitElement {
       ${this._pick('Energy kWh (Energy tile)','washer_energy',['sensor'])}
       ${this._pick('Water consumption (Water tile)','washer_water_consumption',['sensor'])}
       ${this._pick('Job state (Job tile)','washer_job_state',['sensor'])}
+      <p class="hg">🎮 Control entities</p>
+      <p class="ht">Configure these to enable the Start/Pause/Stop controls panel on the card.</p>
+      ${this._pick('Washer control (select: stop/run/pause)','washer_control',['select'])}
+      ${this._pick('Water temperature control (select)','washer_water_temperature',['sensor','select'])}
+      ${this._pick('Spin level control (select)','washer_spin_level',['sensor','select'])}
+      ${this._pick('Rinse cycles (number)','washer_rinse_cycles',['number'])}
+      ${this._pick('BubbleSoak switch','washer_bubble_soak',['switch'])}
+      ${this._pick('Anti-wrinkle switch','washer_wrinkle_prevent',['switch'])}
+      ${this._pick('Remote control status (binary_sensor)','washer_remote_control',['binary_sensor'])}
     `;
   }
 
@@ -659,7 +822,6 @@ class SamsungLaundryCardEditor extends LitElement {
       ${this._pick('Energy kWh (Energy tile)','dryer_energy',['sensor'])}
       ${this._pick('Power W (Power tile)','dryer_power',['sensor'])}
       ${this._pick('Job state (Job tile)','dryer_job_state',['sensor'])}
-      <p class="hg">⚙️ Controls</p>
     `;
   }
 
@@ -667,7 +829,8 @@ class SamsungLaundryCardEditor extends LitElement {
     if (!this._config) return html``;
     const wCount = ['washer_machine_state','washer_completion_time','washer_current_course',
       'washer_water_temperature','washer_spin_level','washer_power',
-      'washer_energy','washer_water_consumption','washer_job_state'].filter(k=>this._config[k]).length;
+      'washer_energy','washer_water_consumption','washer_job_state',
+      'washer_control','washer_rinse_cycles','washer_bubble_soak','washer_wrinkle_prevent'].filter(k=>this._config[k]).length;
     const dCount = ['dryer_machine_state','dryer_completion_time','dryer_current_course',
       'dryer_energy','dryer_power','dryer_job_state',].filter(k=>this._config[k]).length;
     return html`
