@@ -11,7 +11,7 @@
  * 6 fully configurable stat tiles per machine.
  */
 
-const LC_VERSION = '2.3.0';
+const LC_VERSION = '2.3.1';
 
 const LitElement = Object.getPrototypeOf(customElements.get('ha-panel-lovelace'));
 const { html, css } = LitElement.prototype;
@@ -178,7 +178,20 @@ class SamsungLaundryCard extends LitElement {
     const progEid  = cfg[`${side}_current_course`];
 
     const rawState  = getState(this.hass, stateEid);
-    const normState = normaliseState(rawState);
+    let normState = normaliseState(rawState);
+
+    // If still "running" but the completion timestamp is in the past, the SmartThings
+    // integration missed the final state update. Override to 'done' so the UI is accurate.
+    if (normState === 'running' && timeEid) {
+      const timeVal = getState(this.hass, timeEid);
+      if (timeVal && /^\d{4}-\d{2}-\d{2}T/.test(timeVal)) {
+        const completionDate = new Date(timeVal);
+        if (!isNaN(completionDate.getTime()) && completionDate < new Date()) {
+          normState = 'done';
+        }
+      }
+    }
+
     const program   = progEid ? displayVal(this.hass, progEid) : '—';
 
     let timeText = '—';
