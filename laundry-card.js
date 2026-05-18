@@ -11,7 +11,7 @@
  * 6 fully configurable stat tiles per machine.
  */
 
-const LC_VERSION = '2.3.1';
+const LC_VERSION = '2.3.2';
 
 const LitElement = Object.getPrototypeOf(customElements.get('ha-panel-lovelace'));
 const { html, css } = LitElement.prototype;
@@ -182,11 +182,22 @@ class SamsungLaundryCard extends LitElement {
 
     // If still "running" but the completion timestamp is in the past, the SmartThings
     // integration missed the final state update. Override to 'done' so the UI is accurate.
+    // Guard: only act if the completion_time entity was last updated AFTER the machine
+    // entered its current running state — otherwise the timestamp belongs to a previous
+    // cycle and would produce a false "Done" while a new cycle is actually in progress.
     if (normState === 'running' && timeEid) {
       const timeVal = getState(this.hass, timeEid);
       if (timeVal && /^\d{4}-\d{2}-\d{2}T/.test(timeVal)) {
-        const completionDate = new Date(timeVal);
-        if (!isNaN(completionDate.getTime()) && completionDate < new Date()) {
+        const completionDate        = new Date(timeVal);
+        const machineLastChanged    = new Date(this.hass?.states[stateEid]?.last_changed);
+        const completionLastChanged = new Date(this.hass?.states[timeEid]?.last_changed);
+        const completionBelongsToCurrentCycle =
+          !isNaN(completionLastChanged.getTime()) &&
+          !isNaN(machineLastChanged.getTime()) &&
+          completionLastChanged > machineLastChanged;
+        if (!isNaN(completionDate.getTime()) &&
+            completionDate < new Date() &&
+            completionBelongsToCurrentCycle) {
           normState = 'done';
         }
       }
